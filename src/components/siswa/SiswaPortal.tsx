@@ -259,6 +259,7 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
               const existingSession = sessions.find(s => s.ujian_id === exam.id);
               const isFinished = existingSession?.status === 'selesai';
               const isBlocked = existingSession?.status === 'diblokir';
+              const isResuming = existingSession && (existingSession.status === 'mengerjakan' || existingSession.status === 'terputus');
               
               return (
                 <div key={exam.id} className="bg-white border-2 border-slate-100 rounded-2xl overflow-hidden">
@@ -299,10 +300,17 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
                     </div>
                   ) : (
                     <button 
-                      onClick={() => handleStartExamClick(exam)}
+                      onClick={() => {
+                        if (isResuming) {
+                          setActiveExamId(exam.id);
+                          setIsTakingExam(true);
+                        } else {
+                          handleStartExamClick(exam);
+                        }
+                      }}
                       className="w-full px-4 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold flex items-center justify-center gap-2 transition-colors"
                     >
-                      <Play className="w-4 h-4" /> Mulai Ujian
+                      <Play className="w-4 h-4" /> {isResuming ? 'Lanjutkan Ujian' : 'Mulai Ujian'}
                     </button>
                   )}
                 </div>

@@ -33,10 +33,15 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
 
   const sessionWaktuMulaiRef = useRef<string | null>(null);
   const lastBroadcastSeenRef = useRef<string>('');
+  const examRef = useRef<Exam | undefined>(undefined);
 
   useEffect(() => {
     sessionWaktuMulaiRef.current = sessionWaktuMulai;
   }, [sessionWaktuMulai]);
+
+  useEffect(() => {
+    examRef.current = exam;
+  }, [exam]);
 
   useEffect(() => {
     lastBroadcastSeenRef.current = lastBroadcastSeen;
@@ -104,10 +109,7 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
             }
           }
 
-          // Check broadcast message on load
-          if (foundExam.broadcast_message && foundExam.broadcast_message.trim() !== '') {
-            setBroadcastPopup(foundExam.broadcast_message.trim());
-          }
+          // Do not show broadcast message on initial load to prevent late joiners seeing old popups.
         }
       } catch (err) {
         console.error("Gagal memuat ujian:", err);
@@ -133,6 +135,15 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
         (payload: any) => {
           console.log("Realtime exam update received:", payload);
           const updatedExam = payload.new as Exam;
+
+          // Only trigger the popup if the broadcast message has actually CHANGED in this real-time update
+          const oldMsg = (examRef.current?.broadcast_message || '').trim();
+          const newMsg = (updatedExam.broadcast_message || '').trim();
+
+          if (newMsg !== '' && newMsg !== oldMsg && newMsg !== lastBroadcastSeenRef.current) {
+            setBroadcastPopup(newMsg);
+          }
+
           setExam(updatedExam);
 
           if (sessionWaktuMulaiRef.current) {
@@ -140,13 +151,6 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
             const totalDurasiSeconds = (updatedExam.durasi + (updatedExam.extended_time || 0)) * 60;
             const remaining = Math.max(0, totalDurasiSeconds - elapsedSeconds);
             setTimeLeft(remaining);
-          }
-
-          if (updatedExam.broadcast_message) {
-            const cleanMsg = updatedExam.broadcast_message.trim();
-            if (cleanMsg !== '' && cleanMsg !== lastBroadcastSeenRef.current) {
-              setBroadcastPopup(cleanMsg);
-            }
           }
         }
       )
