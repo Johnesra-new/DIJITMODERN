@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, RefreshCw, Copy, Check, ShieldAlert, Plus, Edit, X, Globe, MapPin, Link2, UploadCloud } from 'lucide-react';
-import { db, InstansiConfig } from '../../utils/supabaseDb';
+import { Settings, RefreshCw, Copy, Check, ShieldAlert, Plus, Edit, X, Globe, MapPin, Link2, UploadCloud, Key, Mail, User as UserIcon } from 'lucide-react';
+import { db, InstansiConfig, User } from '../../utils/supabaseDb';
 
 export const InstansiSettings: React.FC = () => {
   const [instansiList, setInstansiList] = useState<InstansiConfig[]>([]);
@@ -18,6 +18,12 @@ export const InstansiSettings: React.FC = () => {
   const [zonaWaktu, setZonaWaktu] = useState('WITA (Asia/Makassar)');
   const [kodeInstansi, setKodeInstansi] = useState('');
   const [gsheetsUrl, setGsheetsUrl] = useState('');
+  
+  // Instansi Guru Account Fields
+  const [teachers, setTeachers] = useState<User[]>([]);
+  const [accountUsername, setAccountUsername] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
   
   // Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -48,6 +54,9 @@ export const InstansiSettings: React.FC = () => {
     try {
       const list = await db.getAllInstansi();
       setInstansiList(list);
+      
+      const allUsers = await db.getUsers();
+      setTeachers(allUsers.filter(u => u.role === 'guru'));
     } catch (err) {
       console.error("Gagal mengambil daftar instansi:", err);
     } finally {
@@ -84,6 +93,9 @@ export const InstansiSettings: React.FC = () => {
     setZonaWaktu('WITA (Asia/Makassar)');
     setKodeInstansi('');
     setGsheetsUrl('');
+    setAccountUsername('');
+    setAccountPassword('');
+    setAccountEmail('');
     setSelectedInstansi(null);
     setViewMode('add');
   };
@@ -96,6 +108,19 @@ export const InstansiSettings: React.FC = () => {
     setZonaWaktu(inst.zona_waktu || 'WITA (Asia/Makassar)');
     setKodeInstansi(inst.kode_instansi || '');
     setGsheetsUrl(inst.gsheets_url || '');
+    
+    // Find the associated main guru account
+    const instUser = teachers.find(u => u.instansi_id === inst.id);
+    if (instUser) {
+      setAccountUsername(instUser.username || '');
+      setAccountPassword(instUser.password_hash || '');
+      setAccountEmail(instUser.email || '');
+    } else {
+      setAccountUsername('');
+      setAccountPassword('');
+      setAccountEmail('');
+    }
+    
     setViewMode('edit');
   };
 
@@ -103,6 +128,11 @@ export const InstansiSettings: React.FC = () => {
     e.preventDefault();
     if (!nama.trim() || !alamat.trim()) {
       alert('Nama instansi dan alamat wajib diisi!');
+      return;
+    }
+
+    if (!accountUsername.trim() || !accountPassword.trim()) {
+      alert('Username dan Password untuk Akun Guru Utama wajib diisi!');
       return;
     }
 
@@ -118,9 +148,25 @@ export const InstansiSettings: React.FC = () => {
           kode_instansi: finalCode,
           gsheets_url: gsheetsUrl
         };
-        await db.addInstansi(payload);
-        alert('Instansi baru berhasil ditambahkan!');
+        // 1. Add Instansi first
+        const newInst = await db.addInstansi(payload);
+        
+        // 2. Add associated teacher/guru account automatically
+        await db.addUser({
+          username: accountUsername.trim(),
+          name: `Guru ${nama}`,
+          nip_nis: `GURU-${finalCode}`,
+          email: accountEmail.trim() || `${accountUsername.trim()}@dijit.sch.id`,
+          password_hash: accountPassword.trim(),
+          role: 'guru',
+          status: 'aktif',
+          instansi_id: newInst.id,
+          avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(nama)}`
+        });
+        
+        alert('Instansi baru & Akun Guru berhasil ditambahkan!');
       } else if (viewMode === 'edit' && selectedInstansi?.id) {
+        // 1. Update Instansi
         await db.updateInstansi({
           id: selectedInstansi.id,
           nama,
@@ -130,7 +176,32 @@ export const InstansiSettings: React.FC = () => {
           kode_instansi: finalCode,
           gsheets_url: gsheetsUrl
         });
-        alert('Informasi instansi berhasil diperbarui!');
+        
+        // 2. Update or Create associated teacher/guru account
+        const existingUser = teachers.find(u => u.instansi_id === selectedInstansi.id);
+        if (existingUser) {
+          await db.updateUser({
+            id: existingUser.id,
+            username: accountUsername.trim(),
+            email: accountEmail.trim() || existingUser.email,
+            password_hash: accountPassword.trim(),
+            name: `Guru ${nama}`
+          });
+        } else {
+          await db.addUser({
+            username: accountUsername.trim(),
+            name: `Guru ${nama}`,
+            nip_nis: `GURU-${finalCode}`,
+            email: accountEmail.trim() || `${accountUsername.trim()}@dijit.sch.id`,
+            password_hash: accountPassword.trim(),
+            role: 'guru',
+            status: 'aktif',
+            instansi_id: selectedInstansi.id,
+            avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(nama)}`
+          });
+        }
+        
+        alert('Informasi instansi & Akun Guru berhasil diperbarui!');
       }
       setViewMode('list');
       await loadInstansi();
@@ -232,6 +303,26 @@ export const InstansiSettings: React.FC = () => {
                       {copiedId === inst.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                     </button>
                   </div>
+                  
+                  {/* Account Information for Guru */}
+                  {(() => {
+                    const instUser = teachers.find(u => u.instansi_id === inst.id);
+                    return (
+                      <div className="p-3 bg-gradient-to-tr from-slate-50 to-blue-50/25 border border-slate-200 rounded-xl space-y-1.5 mt-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Akun Instansi (Guru/Pengawas)</span>
+                        <div className="text-[11px] text-slate-600 space-y-1">
+                          <div className="flex justify-between">
+                            <span>Username:</span>
+                            <span className="font-bold font-mono text-slate-805 bg-slate-100 px-1 rounded">{instUser?.username || 'Belum dibuat'}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Password:</span>
+                            <span className="font-bold font-mono text-slate-805 bg-slate-100 px-1 rounded">{instUser?.password_hash || 'Belum dibuat'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))
@@ -335,6 +426,60 @@ export const InstansiSettings: React.FC = () => {
                     onChange={(e) => setGsheetsUrl(e.target.value)}
                     placeholder="https://script.google.com/macros/s/..."
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 pl-10 pr-3.5 text-xs text-slate-800 outline-none font-mono text-[10px]"
+                  />
+                </div>
+              </div>
+
+              {/* Akun Guru Utama Section */}
+              <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/10 space-y-4">
+                <div className="flex items-center gap-2 pb-1.5 border-b border-slate-200">
+                  <UserIcon className="w-4 h-4 text-blue-600 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-800">Konfigurasi Akun Guru Utama</span>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 col-span-1">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Username Akun</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={accountUsername}
+                      onChange={(e) => setAccountUsername(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                      placeholder="guru_sman1"
+                      className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 col-span-1">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Kata Sandi (Password)</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={accountPassword}
+                      onChange={(e) => setAccountPassword(e.target.value)}
+                      placeholder="Masukkan password guru..."
+                      className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none placeholder:text-slate-400 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Email Guru / Pengawas (Opsional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={accountEmail}
+                    onChange={(e) => setAccountEmail(e.target.value)}
+                    placeholder="guru@sman1.sch.id"
+                    className="w-full bg-white border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none placeholder:text-slate-400"
                   />
                 </div>
               </div>

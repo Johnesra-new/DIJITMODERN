@@ -51,7 +51,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
   const menuItems = [
     { id: 'dashboard', label: 'Ringkasan', icon: LayoutDashboard },
     { id: 'instansi', label: 'Manajemen Instansi', icon: Settings },
-    { id: 'guru', label: 'Manajemen Akun Guru', icon: Users },
     { id: 'logs', label: 'Log Aktivitas', icon: Activity },
     { id: 'profile', label: 'Profil Saya', icon: UserIcon },
   ] as const;
@@ -60,8 +59,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
     switch (activeTab) {
       case 'dashboard':
         return <DashboardStats />;
-      case 'guru':
-        return <GuruManagement />;
       case 'instansi':
         return <InstansiSettings />;
       case 'logs':
