@@ -151,7 +151,7 @@ export const GuruLayout: React.FC<GuruLayoutProps> = ({ guruUser, onLogout, onUs
       case 'rekap':
         return <RekapNilai guruUser={guruUser} />;
       case 'siswa':
-        return <SiswaManagement />;
+        return <SiswaManagement currentUser={guruUser} />;
       case 'kelas':
         return <KelasManagement />;
       case 'profile':

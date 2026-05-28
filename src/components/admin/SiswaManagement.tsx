@@ -11,13 +11,19 @@ import {
   FileSpreadsheet, 
   AlertCircle, 
   Check, 
-  Download 
+  Download,
+  Building2
 } from 'lucide-react';
-import { db, User } from '../../utils/supabaseDb';
+import { db, User, InstansiConfig } from '../../utils/supabaseDb';
 import * as XLSX from 'xlsx';
 
-export const SiswaManagement: React.FC = () => {
+interface SiswaManagementProps {
+  currentUser?: User;
+}
+
+export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser }) => {
   const [students, setStudents] = useState<User[]>([]);
+  const [instansiList, setInstansiList] = useState<InstansiConfig[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -34,6 +40,7 @@ export const SiswaManagement: React.FC = () => {
   const [email, setEmail] = useState('');
   const [kelas, setKelas] = useState('XII MIPA 1');
   const [status, setStatus] = useState<'aktif' | 'nonaktif'>('aktif');
+  const [studentInstansiId, setStudentInstansiId] = useState<string>('');
 
   // Bulk Import File States
   const [dragOver, setDragOver] = useState(false);
@@ -47,7 +54,16 @@ export const SiswaManagement: React.FC = () => {
   const handleRefreshList = async () => {
     try {
       const allUsers = await db.getUsers();
-      setStudents(allUsers.filter(u => u.role === 'siswa'));
+      let filtered = allUsers.filter(u => u.role === 'siswa');
+      
+      // If current user is Guru, filter to only show their instansi's students
+      if (currentUser && currentUser.role === 'guru') {
+        filtered = filtered.filter(u => u.instansi_id === currentUser.instansi_id);
+      }
+      setStudents(filtered);
+
+      const list = await db.getAllInstansi();
+      setInstansiList(list);
     } catch (err) {
       console.error("Gagal mengambil data siswa:", err);
     } finally {
@@ -66,6 +82,7 @@ export const SiswaManagement: React.FC = () => {
     setEmail('');
     setKelas('XII MIPA 1');
     setStatus('aktif');
+    setStudentInstansiId(instansiList[0]?.id || '');
     setIsAddModalOpen(true);
   };
 
@@ -77,6 +94,7 @@ export const SiswaManagement: React.FC = () => {
     setEmail(student.email);
     setKelas(student.kelas || 'XII MIPA 1');
     setStatus(student.status);
+    setStudentInstansiId(student.instansi_id || '');
     setIsEditModalOpen(true);
   };
 
@@ -88,6 +106,13 @@ export const SiswaManagement: React.FC = () => {
     }
 
     try {
+      let finalInstansiId = null;
+      if (currentUser && currentUser.role === 'guru') {
+        finalInstansiId = currentUser.instansi_id;
+      } else if (currentUser && currentUser.role === 'admin') {
+        finalInstansiId = studentInstansiId || null;
+      }
+
       const newUser = await db.addUser({
         username,
         name,
@@ -96,6 +121,7 @@ export const SiswaManagement: React.FC = () => {
         role: 'siswa',
         status,
         kelas,
+        instansi_id: finalInstansiId,
         avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`
       });
 
@@ -129,7 +155,8 @@ export const SiswaManagement: React.FC = () => {
         nip_nis: nis,
         email,
         status,
-        kelas
+        kelas,
+        instansi_id: currentUser?.role === 'admin' ? (studentInstansiId || null) : currentStudent.instansi_id
       });
 
       setIsEditModalOpen(false);
@@ -352,6 +379,13 @@ export const SiswaManagement: React.FC = () => {
         randPassword += chars.charAt(Math.floor(Math.random() * chars.length));
       }
 
+      let finalInstansiId = null;
+      if (currentUser && currentUser.role === 'guru') {
+        finalInstansiId = currentUser.instansi_id;
+      } else if (currentUser && currentUser.role === 'admin') {
+        finalInstansiId = studentInstansiId || null;
+      }
+
       usersToUpsert.push({
         id: crypto.randomUUID(),
         username: row.username,
@@ -361,6 +395,7 @@ export const SiswaManagement: React.FC = () => {
         role: 'siswa',
         status: 'aktif',
         kelas: row.kelas,
+        instansi_id: finalInstansiId,
         avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(row.nama)}`
       });
 
@@ -767,8 +802,27 @@ export const SiswaManagement: React.FC = () => {
                 </div>
               </div>
 
+              {currentUser?.role === 'admin' && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Instansi / Lembaga Pendidikan</span>
+                  </label>
+                  <select
+                    value={studentInstansiId}
+                    onChange={(e) => setStudentInstansiId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none font-medium cursor-pointer"
+                  >
+                    <option value="">-- Pilih Instansi (Global/Umum) --</option>
+                    {instansiList.map((inst) => (
+                      <option key={inst.id} value={inst.id}>{inst.nama}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                   <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
                   <span>Kelas / Rombongan Belajar</span>
                 </label>
@@ -888,8 +942,27 @@ export const SiswaManagement: React.FC = () => {
                 </div>
               </div>
 
+              {currentUser?.role === 'admin' && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Instansi / Lembaga Pendidikan</span>
+                  </label>
+                  <select
+                    value={studentInstansiId}
+                    onChange={(e) => setStudentInstansiId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none font-medium cursor-pointer"
+                  >
+                    <option value="">-- Pilih Instansi (Global/Umum) --</option>
+                    {instansiList.map((inst) => (
+                      <option key={inst.id} value={inst.id}>{inst.nama}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                   <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
                   <span>Kelas / Rombongan Belajar</span>
                 </label>
