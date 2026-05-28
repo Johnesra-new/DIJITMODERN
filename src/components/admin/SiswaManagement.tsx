@@ -17,6 +17,12 @@ import {
 import { db, User, InstansiConfig } from '../../utils/supabaseDb';
 import * as XLSX from 'xlsx';
 
+const AVAILABLE_CLASSES = [
+  ...Array.from({ length: 10 }, (_, i) => `X-${i + 1}`),
+  ...Array.from({ length: 10 }, (_, i) => `XI-${i + 1}`),
+  ...Array.from({ length: 10 }, (_, i) => `XII-${i + 1}`)
+];
+
 interface SiswaManagementProps {
   currentUser?: User;
 }
@@ -39,7 +45,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
   const [nis, setNis] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [kelas, setKelas] = useState('XII MIPA 1');
+  const [kelas, setKelas] = useState('X-1');
   const [status, setStatus] = useState<'aktif' | 'nonaktif'>('aktif');
   const [studentInstansiId, setStudentInstansiId] = useState<string>('');
 
@@ -95,7 +101,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
     setNis(student.nip_nis);
     setEmail(student.email || '');
     setPassword(student.password_hash || '');
-    setKelas(student.kelas || 'XII MIPA 1');
+    setKelas(student.kelas || 'X-1');
     setStatus(student.status);
     setStudentInstansiId(student.instansi_id || '');
     setIsEditModalOpen(true);
@@ -849,10 +855,9 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
                   onChange={(e) => setKelas(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none font-medium cursor-pointer"
                 >
-                  <option value="XII MIPA 1">XII MIPA 1</option>
-                  <option value="XII MIPA 2">XII MIPA 2</option>
-                  <option value="XII IPS 1">XII IPS 1</option>
-                  <option value="XII IPS 2">XII IPS 2</option>
+                  {AVAILABLE_CLASSES.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
                 </select>
               </div>
 
@@ -998,10 +1003,9 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
                   onChange={(e) => setKelas(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none cursor-pointer"
                 >
-                  <option value="XII MIPA 1">XII MIPA 1</option>
-                  <option value="XII MIPA 2">XII MIPA 2</option>
-                  <option value="XII IPS 1">XII IPS 1</option>
-                  <option value="XII IPS 2">XII IPS 2</option>
+                  {AVAILABLE_CLASSES.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
                 </select>
               </div>
 

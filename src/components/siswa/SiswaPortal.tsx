@@ -81,7 +81,22 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
     };
   }, [siswa.id, refreshData]);
 
-  const studentExams = exams.filter(exam => exam.kelas_ids?.includes(siswa.kelas || ''));
+  const studentExams = exams.filter(exam => {
+    if (!siswa.kelas) return false;
+    const cls = siswa.kelas.toUpperCase();
+    const isGrade10 = cls.startsWith('X-') || cls === 'X' || cls === '10';
+    const isGrade11 = cls.startsWith('XI-') || cls === 'XI' || cls === '11';
+    const isGrade12 = cls.startsWith('XII-') || cls === 'XII' || cls === '12';
+
+    return exam.kelas_ids?.some(k => {
+      const target = k.toUpperCase();
+      if (target === cls) return true;
+      if (isGrade10 && (target === 'X' || target === '10' || target === 'KELAS 10' || target === 'KELAS X')) return true;
+      if (isGrade11 && (target === 'XI' || target === '11' || target === 'KELAS 11' || target === 'KELAS XI')) return true;
+      if (isGrade12 && (target === 'XII' || target === '12' || target === 'KELAS 12' || target === 'KELAS XII')) return true;
+      return false;
+    });
+  });
   const activeExams = studentExams.filter(e => e.status === 'berlangsung');
   const completedSessions = sessions.filter(s => s.status === 'selesai');
 

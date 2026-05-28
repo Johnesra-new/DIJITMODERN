@@ -42,11 +42,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
     const loadExams = async () => {
       try {
         const allExams = await db.getExams();
-        const filtered = allExams.filter(e => e.guru_id === guruUser.id);
-        setExams(filtered);
-        if (filtered.length > 0) {
-          setSelectedExamId(filtered[0].id);
-          setLateLimitInput((filtered[0].late_limit ?? 15).toString());
+        // Allow monitoring ANY exam for absolute flexibility (any class, any subject)
+        setExams(allExams);
+        if (allExams.length > 0) {
+          setSelectedExamId(allExams[0].id);
+          setLateLimitInput((allExams[0].late_limit ?? 15).toString());
         }
       } catch (err) {
         console.error("Gagal memuat daftar ujian:", err);
@@ -55,7 +55,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
       }
     };
     loadExams();
-  }, [guruUser.id]);
+  }, []);
 
   // Live countdown timer hook
   useEffect(() => {
