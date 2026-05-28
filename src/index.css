@@ -1,0 +1,102 @@
+/* Outfit font import from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Overwrite the blue colors with deep premium dark blue */
+  --color-blue-50: #f4f7fc;
+  --color-blue-100: #e8eff9;
+  --color-blue-200: #cfe0f5;
+  --color-blue-300: #a7c5ed;
+  --color-blue-400: #74a4e1;
+  --color-blue-500: #0a1e3f; /* Premium deep dark navy blue */
+  --color-blue-600: #07152b; /* Even darker navy blue */
+  --color-blue-700: #050e1d; /* Very dark navy blue */
+  --color-blue-800: #030813; /* Extremely dark navy blue */
+  --color-blue-900: #01040a;
+}
+
+/* Custom premium styling */
+body {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  background-color: #ffffff; /* standard pure white */
+  color: #0f172a; /* slate-900 */
+  overflow-x: hidden;
+}
+
+/* Custom premium scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9; /* slate-100 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6; /* blue-500 */
+}
+
+/* Custom Animations & Keyframes */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+@keyframes pulseSlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-shake {
+  animation: shake 0.2s ease-in-out 2;
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 4s infinite ease-in-out;
+}
+
+.animate-spin-slow {
+  animation: spin 8s infinite linear;
+}
+
+/* Responsive Glassmorphism utility card for Light Theme */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8); /* slate-200 */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
