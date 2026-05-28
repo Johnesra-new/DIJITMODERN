@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Clock, ChevronRight, ChevronLeft, Check, X, HelpCircle, Send, Loader2
+  Clock, ChevronRight, ChevronLeft, Check, X, HelpCircle, Send, Loader2, Lock, Megaphone, AlertCircle
 } from 'lucide-react';
 import { db, Exam, Question, User as SiswaType } from '../../utils/supabaseDb';
+import { supabase } from '../../utils/supabaseClient';
 
 interface PengerjaanUjianProps {
   siswa: SiswaType;
@@ -25,6 +26,29 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const questionAreaRef = useRef<HTMLDivElement>(null);
 
+  // Live Real-Time & Broadcast States
+  const [sessionWaktuMulai, setSessionWaktuMulai] = useState<string | null>(null);
+  const [broadcastPopup, setBroadcastPopup] = useState<string | null>(null);
+  const [lastBroadcastSeen, setLastBroadcastSeen] = useState<string>('');
+
+  const sessionWaktuMulaiRef = useRef<string | null>(null);
+  const lastBroadcastSeenRef = useRef<string>('');
+
+  useEffect(() => {
+    sessionWaktuMulaiRef.current = sessionWaktuMulai;
+  }, [sessionWaktuMulai]);
+
+  useEffect(() => {
+    lastBroadcastSeenRef.current = lastBroadcastSeen;
+  }, [lastBroadcastSeen]);
+
+  const handleDismissBroadcast = () => {
+    if (broadcastPopup) {
+      setLastBroadcastSeen(broadcastPopup);
+      setBroadcastPopup(null);
+    }
+  };
+
   // Load Exam & Questions, and create/retrieve Session
   useEffect(() => {
     const loadExamData = async () => {
@@ -34,7 +58,6 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
         setExam(foundExam);
 
         if (foundExam) {
-          setTimeLeft(foundExam.durasi * 60);
           const allQuestions = await db.getQuestions();
           const filteredQ = allQuestions.filter(q => foundExam.soal_ids?.includes(q.id));
           setQuestions(filteredQ);
@@ -43,13 +66,14 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
           let sess = await db.getSessionByStudentAndExam(siswa.id, examId);
           if (!sess) {
             // Create new session
+            const newWaktuMulai = new Date().toISOString();
             sess = await db.addSession({
               siswa_id: siswa.id,
               siswa_name: siswa.name,
               siswa_nis: siswa.nip_nis,
               siswa_kelas: siswa.kelas || '',
               ujian_id: examId,
-              waktu_mulai: new Date().toISOString(),
+              waktu_mulai: newWaktuMulai,
               jawaban_siswa: {},
               status: 'mengerjakan',
               seed: Math.random(),
@@ -57,6 +81,9 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
               kamera_snapshots: [],
               kamera_status: 'aman'
             });
+            setSessionWaktuMulai(newWaktuMulai);
+            const totalDurasi = foundExam.durasi + (foundExam.extended_time || 0);
+            setTimeLeft(totalDurasi * 60);
           } else if (sess.status === 'diblokir') {
             alert("Sesi ujian Anda diblokir. Silakan hubungi pengawas.");
             onFinish();
@@ -69,10 +96,17 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
             // Resume session
             setAnswers(sess.jawaban_siswa || {});
             if (sess.waktu_mulai) {
+              setSessionWaktuMulai(sess.waktu_mulai);
               const elapsedSeconds = Math.floor((Date.now() - new Date(sess.waktu_mulai).getTime()) / 1000);
-              const remaining = Math.max(0, foundExam.durasi * 60 - elapsedSeconds);
+              const totalDurasi = foundExam.durasi + (foundExam.extended_time || 0);
+              const remaining = Math.max(0, totalDurasi * 60 - elapsedSeconds);
               setTimeLeft(remaining);
             }
+          }
+
+          // Check broadcast message on load
+          if (foundExam.broadcast_message && foundExam.broadcast_message.trim() !== '') {
+            setBroadcastPopup(foundExam.broadcast_message.trim());
           }
         }
       } catch (err) {
@@ -81,6 +115,47 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
     };
     loadExamData();
   }, [examId, siswa.id, onFinish]);
+
+  // Realtime WebSockets for Ujian Changes (Extended Time & Broadcasts)
+  useEffect(() => {
+    if (isLoading || !exam) return;
+
+    const examSubscription = supabase
+      .channel(`exam-realtime-${examId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'exams',
+          filter: `id=eq.${examId}`
+        },
+        (payload: any) => {
+          console.log("Realtime exam update received:", payload);
+          const updatedExam = payload.new as Exam;
+          setExam(updatedExam);
+
+          if (sessionWaktuMulaiRef.current) {
+            const elapsedSeconds = Math.floor((Date.now() - new Date(sessionWaktuMulaiRef.current).getTime()) / 1000);
+            const totalDurasiSeconds = (updatedExam.durasi + (updatedExam.extended_time || 0)) * 60;
+            const remaining = Math.max(0, totalDurasiSeconds - elapsedSeconds);
+            setTimeLeft(remaining);
+          }
+
+          if (updatedExam.broadcast_message) {
+            const cleanMsg = updatedExam.broadcast_message.trim();
+            if (cleanMsg !== '' && cleanMsg !== lastBroadcastSeenRef.current) {
+              setBroadcastPopup(cleanMsg);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(examSubscription);
+    };
+  }, [isLoading, examId]);
 
   // Loading screen for 5 seconds (50 steps of 100ms)
   useEffect(() => {
@@ -220,8 +295,16 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
 
   const handleSubmitExam = async () => {
     if (isSubmitting) return;
-    setIsSubmitting(true);
     if (!exam) return;
+
+    // Earliest Submit Guard (Kumpul 15 Menit Sebelum Ujian Habis)
+    const guardDurationSeconds = Math.min(15, exam.durasi) * 60;
+    if (timeLeft > guardDurationSeconds) {
+      alert(`Anda belum diperbolehkan mengumpulkan ujian! Tombol kumpulkan hanya akan aktif di 15 menit terakhir ujian.`);
+      return;
+    }
+
+    setIsSubmitting(true);
 
     let jumlahBenar = 0;
     let maxScore = 0;
@@ -511,12 +594,33 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
               Selanjutnya <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
-            <button 
-              onClick={() => { if(window.confirm(`Kumpulkan ujian? ${answeredCount}/${questions.length} soal terjawab.`)) handleSubmitExam(); }}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl text-xs font-bold"
-            >
-              <Send className="w-4 h-4" /> Kumpulkan
-            </button>
+            (() => {
+              const guardDurationSeconds = Math.min(15, exam.durasi) * 60;
+              const isLocked = timeLeft > guardDurationSeconds;
+
+              if (isLocked) {
+                return (
+                  <div className="flex-1 flex flex-col items-center justify-center p-3 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl">
+                    <div className="flex items-center gap-1 text-slate-700 font-bold text-xs">
+                      <Lock className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                      <span>Tombol Kumpul Terkunci</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                      Aktif dalam {formatTime(timeLeft - guardDurationSeconds)}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <button 
+                  onClick={() => { if(window.confirm(`Kumpulkan ujian? ${answeredCount}/${questions.length} soal terjawab.`)) handleSubmitExam(); }}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98] text-white rounded-xl text-xs font-bold shadow-md transition-all"
+                >
+                  <Send className="w-4 h-4" /> Kumpulkan
+                </button>
+              );
+            })()
           )}
         </div>
       </div>
@@ -555,6 +659,38 @@ export const PengerjaanUjian: React.FC<PengerjaanUjianProps> = ({ siswa, examId,
           <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-slate-50 border border-slate-200 rounded-sm"></div> Belum</div>
         </div>
       </div>
+
+      {/* === BROADCAST POPUP (Premium Overlay) === */}
+      {broadcastPopup && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-100 w-full max-w-md rounded-3xl overflow-hidden shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] transform transition-all duration-300 scale-100">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
+              <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-3 border border-white/20 shadow-inner">
+                <Megaphone className="w-7 h-7 text-white animate-bounce" />
+              </div>
+              <h3 className="text-white font-extrabold text-lg tracking-tight">PENGUMUMAN GURU PENGAWAS</h3>
+              <p className="text-amber-100/90 text-[10px] font-bold mt-1 uppercase tracking-wider">Perhatian untuk Semua Siswa</p>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-5 text-center">
+                <p className="text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  "{broadcastPopup}"
+                </p>
+              </div>
+
+              <button 
+                onClick={handleDismissBroadcast} 
+                className="w-full py-4 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white text-sm font-bold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4 text-emerald-400" />
+                Saya Mengerti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

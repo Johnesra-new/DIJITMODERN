@@ -54,6 +54,9 @@ export interface Exam {
   token: string;
   passing_grade: number;
   status: 'draft' | 'terjadwal' | 'berlangsung' | 'selesai' | 'diarsipkan';
+  late_limit?: number;
+  extended_time?: number;
+  broadcast_message?: string;
 }
 
 export interface Violation {

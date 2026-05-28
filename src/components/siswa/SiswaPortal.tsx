@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, Camera, Play, Clock, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
+import { LogOut, Camera, Play, Clock, BookOpen, CheckCircle2, XCircle, Key, Shield, AlertTriangle } from 'lucide-react';
 import { db, User as SiswaType, Exam, StudentSession } from '../../utils/supabaseDb';
 import { supabase } from '../../utils/supabaseClient';
 import { PengerjaanUjian } from './PengerjaanUjian';
@@ -109,6 +109,27 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
       const cleanDbToken = (freshExam.token || '').trim().toUpperCase();
 
       if (cleanInput === cleanDbToken) {
+        // Cek keterlambatan (late limit)
+        // Cari sesi aktif siswa
+        const existingSession = sessions.find(s => s.ujian_id === freshExam.id);
+        const isResuming = existingSession && (existingSession.status === 'mengerjakan' || existingSession.status === 'terputus');
+
+        if (!isResuming) {
+          // Pertama kali mulai ujian
+          if (freshExam.waktu_mulai) {
+            const startTime = new Date(freshExam.waktu_mulai).getTime();
+            const currentTime = Date.now();
+            const lateLimitMinutes = freshExam.late_limit ?? 15;
+            const diffMinutes = (currentTime - startTime) / (60 * 1000);
+
+            if (diffMinutes > lateLimitMinutes) {
+              alert(`Waktu toleransi keterlambatan masuk ujian (${lateLimitMinutes} menit) telah habis. Anda terlambat ${Math.floor(diffMinutes)} menit dari waktu mulai (${new Date(freshExam.waktu_mulai).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}). Silakan hubungi pengawas.`);
+              setTokenModalExam(null);
+              return;
+            }
+          }
+        }
+
         setTokenModalExam(null);
         setActiveExamId(freshExam.id);
         setIsTakingExam(true);
@@ -358,17 +379,40 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
         </div>
       )}
 
-      {/* === TOKEN MODAL === */}
+      {/* === TOKEN MODAL (Premium Glassmorphism Center Screen) === */}
       {tokenModalExam && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl overflow-hidden shadow-2xl">
-            <div className="bg-blue-600 p-5 text-center">
-              <h3 className="text-white font-bold text-lg">Masukkan Token</h3>
-              <p className="text-blue-200 text-xs mt-1">{tokenModalExam.judul}</p>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white/95 border border-slate-100 w-full max-w-md rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(37,99,235,0.15)] transform transition-all duration-300">
+            {/* Gradient Header */}
+            <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 p-6 text-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
+              <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-3 border border-white/20 shadow-inner">
+                <Key className="w-7 h-7 text-white animate-pulse" />
+              </div>
+              <h3 className="text-white font-extrabold text-xl tracking-tight">Verifikasi Token Ujian</h3>
+              <p className="text-blue-100/90 text-xs font-medium mt-1 uppercase tracking-wider">{tokenModalExam.mapel}</p>
             </div>
-            <form onSubmit={handleVerifyToken} className="p-5 space-y-5">
+            
+            <form onSubmit={handleVerifyToken} className="p-6 space-y-6">
+              {/* Exam Specs Box */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-400 font-medium">Ujian:</span>
+                  <span className="text-slate-700 font-bold text-right truncate max-w-[200px]">{tokenModalExam.judul}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-400 font-medium">Durasi:</span>
+                  <span className="text-slate-700 font-bold flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-blue-500" /> {tokenModalExam.durasi} Menit</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-400 font-medium">Batas Telat:</span>
+                  <span className="text-slate-700 font-bold flex items-center gap-1"><Shield className="w-3.5 h-3.5 text-indigo-500" /> {tokenModalExam.late_limit ?? 15} Menit</span>
+                </div>
+              </div>
+
+              {/* Input Area */}
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase block text-center">Token Ujian (6 digit)</label>
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block text-center">MASUKKAN TOKEN AKTIF</label>
                 <input 
                   type="text" 
                   autoFocus
@@ -377,15 +421,24 @@ export const SiswaPortal: React.FC<SiswaPortalProps> = ({ siswa, onLogout }) => 
                   value={tokenInput} 
                   onChange={e => setTokenInput(e.target.value)} 
                   placeholder="••••••" 
-                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-xl py-4 px-4 text-center text-2xl font-mono font-bold tracking-[0.5em] text-slate-800 uppercase outline-none"
+                  className="w-full bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 rounded-2xl py-4 px-4 text-center text-3xl font-mono font-bold tracking-[0.4em] text-slate-800 uppercase outline-none transition-all"
                 />
               </div>
+
+              {/* Buttons */}
               <div className="flex gap-3">
-                <button type="button" onClick={() => setTokenModalExam(null)} className="flex-1 py-3 border border-slate-200 text-slate-500 text-sm font-bold rounded-xl">
+                <button 
+                  type="button" 
+                  onClick={() => setTokenModalExam(null)} 
+                  className="flex-1 py-3.5 border-2 border-slate-100 hover:bg-slate-50 text-slate-500 hover:text-slate-800 text-sm font-bold rounded-2xl transition-all"
+                >
                   Batal
                 </button>
-                <button type="submit" className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-lg">
-                  Mulai →
+                <button 
+                  type="submit" 
+                  className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-sm font-bold rounded-2xl shadow-[0_4px_14px_rgba(37,99,235,0.4)] transition-all flex items-center justify-center gap-1"
+                >
+                  Masuk Ujian
                 </button>
               </div>
             </form>

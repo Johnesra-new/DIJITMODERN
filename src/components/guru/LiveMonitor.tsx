@@ -31,6 +31,11 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
   const [violationLogs, setViolationLogs] = useState<any[]>([]);
   const [warningInput, setWarningInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Live control states
+  const [broadcastInput, setBroadcastInput] = useState('');
+  const [lateLimitInput, setLateLimitInput] = useState('15');
+  const [examTimeLeft, setExamTimeLeft] = useState<number | null>(null);
 
   // Load exams on mount
   useEffect(() => {
@@ -41,6 +46,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
         setExams(filtered);
         if (filtered.length > 0) {
           setSelectedExamId(filtered[0].id);
+          setLateLimitInput((filtered[0].late_limit ?? 15).toString());
         }
       } catch (err) {
         console.error("Gagal memuat daftar ujian:", err);
@@ -50,6 +56,30 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
     };
     loadExams();
   }, [guruUser.id]);
+
+  // Live countdown timer hook
+  useEffect(() => {
+    const activeExam = exams.find(e => e.id === selectedExamId);
+    if (!activeExam || activeExam.status !== 'berlangsung') {
+      setExamTimeLeft(null);
+      return;
+    }
+
+    setLateLimitInput((activeExam.late_limit ?? 15).toString());
+
+    const updateCountdown = () => {
+      const startTime = new Date(activeExam.waktu_mulai).getTime();
+      const durationMin = activeExam.durasi + (activeExam.extended_time || 0);
+      const totalDurationSec = durationMin * 60;
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+      const remaining = Math.max(0, totalDurationSec - elapsedSec);
+      setExamTimeLeft(remaining);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [selectedExamId, exams]);
 
   // Load and sync sessions in real time
   const handleLoadSessions = useCallback(async () => {
@@ -228,6 +258,98 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
           }
         }
         break;
+    }
+  };
+
+  // --- LIVE GURU CONTROLS HANDLERS ---
+  const handleExtendExamTime = async (minutes: number) => {
+    const activeExam = exams.find(e => e.id === selectedExamId);
+    if (!activeExam) return;
+
+    try {
+      const currentExtended = activeExam.extended_time || 0;
+      const nextExtended = currentExtended + minutes;
+      
+      const { error } = await supabase
+        .from('exams')
+        .update({ extended_time: nextExtended })
+        .eq('id', activeExam.id);
+      
+      if (error) throw error;
+
+      setExams(prev => prev.map(e => e.id === activeExam.id ? { ...e, extended_time: nextExtended } : e));
+      
+      await db.addLog(
+        guruUser.id,
+        guruUser.name,
+        guruUser.role,
+        "Tambah Waktu Ujian",
+        `Menambahkan +${minutes} menit waktu ujian untuk semua siswa pada ujian "${activeExam.judul}".`
+      );
+      
+      alert(`Berhasil menambahkan waktu +${minutes} menit untuk semua siswa!`);
+    } catch (err) {
+      console.error(err);
+      alert("Gagal menambahkan waktu ujian.");
+    }
+  };
+
+  const handleSendBroadcast = async () => {
+    const activeExam = exams.find(e => e.id === selectedExamId);
+    if (!activeExam) return;
+    if (!broadcastInput.trim()) {
+      alert("Masukkan pesan pengumuman terlebih dahulu!");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .update({ broadcast_message: broadcastInput.trim() })
+        .eq('id', activeExam.id);
+      
+      if (error) throw error;
+
+      setExams(prev => prev.map(e => e.id === activeExam.id ? { ...e, broadcast_message: broadcastInput.trim() } : e));
+      
+      await db.addLog(
+        guruUser.id,
+        guruUser.name,
+        guruUser.role,
+        "Kirim Broadcast",
+        `Mengirim pengumuman ke seluruh siswa ujian "${activeExam.judul}": "${broadcastInput.trim()}"`
+      );
+      
+      alert("Pengumuman berhasil disebarkan ke semua layar siswa secara real-time!");
+      setBroadcastInput('');
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengirim pengumuman.");
+    }
+  };
+
+  const handleSaveLateLimit = async () => {
+    const activeExam = exams.find(e => e.id === selectedExamId);
+    if (!activeExam) return;
+    const limit = parseInt(lateLimitInput);
+    if (isNaN(limit) || limit < 0) {
+      alert("Batas keterlambatan harus berupa angka positif!");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('exams')
+        .update({ late_limit: limit })
+        .eq('id', activeExam.id);
+      
+      if (error) throw error;
+
+      setExams(prev => prev.map(e => e.id === activeExam.id ? { ...e, late_limit: limit } : e));
+      alert(`Batas toleransi keterlambatan diatur menjadi ${limit} menit!`);
+    } catch (err) {
+      console.error(err);
+      alert("Gagal memperbarui batas keterlambatan.");
     }
   };
 
@@ -432,6 +554,98 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ guruUser }) => {
           {/* Right Column: Violation log stream & Developer simulation panel */}
           <div className="xl:col-span-1 space-y-6">
             
+            {/* Panel Kontrol Ujian Real-Time */}
+            {(() => {
+              const activeExam = exams.find(e => e.id === selectedExamId);
+              if (!activeExam) return null;
+              
+              const formatCountdown = (seconds: number) => {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+              };
+
+              return (
+                <div className="p-5 rounded-2xl border border-blue-200 bg-gradient-to-tr from-white to-blue-50/15 backdrop-blur-md space-y-5 shadow-lg shadow-blue-500/5 animate-fade-in">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 font-sans">
+                      <Clock className="w-4 h-4 text-blue-600 animate-pulse" />
+                      <span>Kontrol Live Ujian</span>
+                    </h3>
+                    <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider ${
+                      activeExam.status === 'berlangsung' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {activeExam.status}
+                    </span>
+                  </div>
+
+                  {/* Countdown Waktu Ujian */}
+                  {activeExam.status === 'berlangsung' && (
+                    <div className="text-center p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">SISA WAKTU MAPEL</span>
+                      <p className="text-2xl font-bold font-mono text-cyan-400 tracking-widest">
+                        {examTimeLeft !== null ? formatCountdown(examTimeLeft) : '00:00:00'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Pengaturan Batas Keterlambatan */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Batas Telat Masuk (Menit)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={lateLimitInput}
+                        onChange={(e) => setLateLimitInput(e.target.value)}
+                        placeholder="15"
+                        className="flex-1 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2 px-3 text-xs outline-none text-center font-bold"
+                      />
+                      <button
+                        onClick={handleSaveLateLimit}
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                      >
+                        Simpan
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tambah Waktu Ujian */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tambah Waktu Semua Siswa</span>
+                    <div className="grid grid-cols-4 gap-1.5 text-[10px] font-bold text-slate-700">
+                      <button onClick={() => handleExtendExamTime(5)} className="py-1.5 bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 rounded-xl transition-all cursor-pointer">+5m</button>
+                      <button onClick={() => handleExtendExamTime(10)} className="py-1.5 bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 rounded-xl transition-all cursor-pointer">+10m</button>
+                      <button onClick={() => handleExtendExamTime(15)} className="py-1.5 bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 rounded-xl transition-all cursor-pointer">+15m</button>
+                      <button onClick={() => handleExtendExamTime(30)} className="py-1.5 bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 rounded-xl transition-all cursor-pointer">+30m</button>
+                    </div>
+                  </div>
+
+                  {/* Kirim Pesan Broadcast */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Broadcast Pengumuman Layar Siswa</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={broadcastInput}
+                        onChange={(e) => setBroadcastInput(e.target.value)}
+                        placeholder="Ketik pesan pengumuman..."
+                        className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2 pl-3 pr-10 text-xs outline-none"
+                      />
+                      <button
+                        onClick={handleSendBroadcast}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-600 hover:text-blue-500 cursor-pointer"
+                        title="Kirim Pesan"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Developer Simulation controller */}
             <div className="p-5 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-4">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block font-sans">
