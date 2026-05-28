@@ -50,8 +50,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
 
   const menuItems = [
     { id: 'dashboard', label: 'Ringkasan', icon: LayoutDashboard },
-    { id: 'guru', label: 'Manajemen Guru', icon: Users },
-    { id: 'instansi', label: 'Pengaturan Sekolah', icon: Settings },
+    { id: 'instansi', label: 'Manajemen Instansi', icon: Settings },
+    { id: 'guru', label: 'Manajemen Akun Guru', icon: Users },
     { id: 'logs', label: 'Log Aktivitas', icon: Activity },
     { id: 'profile', label: 'Profil Saya', icon: UserIcon },
   ] as const;
@@ -95,14 +95,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
           {/* Logo / Brand Header */}
           <div className="flex justify-between items-center pb-2 border-b border-slate-200">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30 shrink-0">
-                A
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-purple-500/30 shrink-0">
+                S
               </div>
               <div>
                 <span className="font-bold text-base tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                  DIJIT Admin
+                  DIJIT Super
                 </span>
-                <span className="text-[9px] text-cyan-600 block font-semibold tracking-widest uppercase">Pusat Kendali</span>
+                <span className="text-[9px] text-purple-600 block font-semibold tracking-widest uppercase">Pusat Kendali</span>
               </div>
             </div>
             <button 
@@ -143,15 +143,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
         <div className="space-y-4 pt-4 border-t border-slate-200">
           <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-200">
             <img 
-              src={adminUser.avatar || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=150&auto=format&fit=crop"}
+              src={adminUser.avatar || "https://api.dicebear.com/7.x/adventurer/svg?seed=StivenJosh"}
               alt="Admin Profile"
               className="w-9 h-9 rounded-full object-cover border border-slate-300 shrink-0"
             />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-800 truncate">{adminUser.name}</p>
               <div className="flex items-center gap-1 mt-0.5">
-                <ShieldCheck className="w-3 h-3 text-cyan-600 shrink-0" />
-                <span className="text-[9px] text-cyan-600 font-medium tracking-wide uppercase">Super Admin</span>
+                <ShieldCheck className="w-3 h-3 text-purple-600 shrink-0" />
+                <span className="text-[9px] text-purple-600 font-medium tracking-wide uppercase">Super Admin</span>
               </div>
             </div>
           </div>
@@ -178,9 +178,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ adminUser, onLogout, o
               <Menu className="w-5 h-5" />
             </button>
             <h2 className="text-sm md:text-base font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <span>{instansi.nama}</span>
-              <span className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-[9px] text-slate-400 font-mono tracking-wider">
-                {instansi.kode_instansi || 'DIJIT'}
+              <span>Pusat Kendali Sistem</span>
+              <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 rounded-full text-[9px] text-purple-600 font-mono tracking-wider font-bold">
+                GLOBAL
               </span>
             </h2>
           </div>

@@ -1,108 +1,132 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, RefreshCw, Copy, Check, ShieldAlert } from 'lucide-react';
+import { Settings, RefreshCw, Copy, Check, ShieldAlert, Plus, Edit, X, Globe, MapPin, Link2 } from 'lucide-react';
 import { db, InstansiConfig } from '../../utils/supabaseDb';
 
 export const InstansiSettings: React.FC = () => {
-  const [config, setConfig] = useState<InstansiConfig | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [instansiList, setInstansiList] = useState<InstansiConfig[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Form Mode: 'list' | 'add' | 'edit'
+  const [viewMode, setViewMode] = useState<'list' | 'add' | 'edit'>('list');
+  const [selectedInstansi, setSelectedInstansi] = useState<InstansiConfig | null>(null);
 
   // Form Fields
   const [nama, setNama] = useState('');
   const [alamat, setAlamat] = useState('');
   const [logo, setLogo] = useState('');
-  const [zonaWaktu, setZonaWaktu] = useState('');
+  const [zonaWaktu, setZonaWaktu] = useState('WITA (Asia/Makassar)');
+  const [kodeInstansi, setKodeInstansi] = useState('');
+  const [gsheetsUrl, setGsheetsUrl] = useState('');
 
-  const loadConfig = async () => {
+  const loadInstansi = async () => {
     try {
-      const inst = await db.getInstansi();
-      setConfig(inst);
-      setNama(inst.nama);
-      setAlamat(inst.alamat);
-      setLogo(inst.logo);
-      setZonaWaktu(inst.zona_waktu);
+      const list = await db.getAllInstansi();
+      setInstansiList(list);
     } catch (err) {
-      console.error("Gagal mengambil konfigurasi instansi:", err);
+      console.error("Gagal mengambil daftar instansi:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadConfig();
+    loadInstansi();
   }, []);
+
+  const generateCode = (namaSekolah: string) => {
+    if (!namaSekolah.trim()) return '';
+    const cleanName = namaSekolah.toUpperCase().replace(/[^A-Z0-9\s]/g, '');
+    const words = cleanName.split(/\s+/).filter(Boolean);
+    let prefix = 'SCH';
+    if (words.length >= 2) {
+      prefix = `${words[0].substring(0, 3)}-${words[1].substring(0, 3)}`;
+    } else if (words.length === 1) {
+      prefix = words[0].substring(0, 4);
+    }
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let rand = '';
+    for (let i = 0; i < 4; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `${prefix}-${rand}`.toUpperCase();
+  };
+
+  const handleOpenAdd = () => {
+    setNama('');
+    setAlamat('');
+    setLogo('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop');
+    setZonaWaktu('WITA (Asia/Makassar)');
+    setKodeInstansi('');
+    setGsheetsUrl('');
+    setSelectedInstansi(null);
+    setViewMode('add');
+  };
+
+  const handleOpenEdit = (inst: InstansiConfig) => {
+    setSelectedInstansi(inst);
+    setNama(inst.nama);
+    setAlamat(inst.alamat || '');
+    setLogo(inst.logo || '');
+    setZonaWaktu(inst.zona_waktu || 'WITA (Asia/Makassar)');
+    setKodeInstansi(inst.kode_instansi || '');
+    setGsheetsUrl(inst.gsheets_url || '');
+    setViewMode('edit');
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!config) return;
+    if (!nama.trim() || !alamat.trim()) {
+      alert('Nama instansi dan alamat wajib diisi!');
+      return;
+    }
 
     try {
-      const updated = await db.updateInstansi({
-        id: config.id,
-        nama,
-        alamat,
-        logo,
-        zona_waktu: zonaWaktu
-      });
-      setConfig({ ...config, ...updated });
-      alert('Informasi profil instansi berhasil diperbarui!');
+      const finalCode = kodeInstansi || generateCode(nama);
+      
+      if (viewMode === 'add') {
+        const payload: Omit<InstansiConfig, 'id'> = {
+          nama,
+          alamat,
+          logo,
+          zona_waktu: zonaWaktu,
+          kode_instansi: finalCode,
+          gsheets_url: gsheetsUrl
+        };
+        await db.addInstansi(payload);
+        alert('Instansi baru berhasil ditambahkan!');
+      } else if (viewMode === 'edit' && selectedInstansi?.id) {
+        await db.updateInstansi({
+          id: selectedInstansi.id,
+          nama,
+          alamat,
+          logo,
+          zona_waktu: zonaWaktu,
+          kode_instansi: finalCode,
+          gsheets_url: gsheetsUrl
+        });
+        alert('Informasi instansi berhasil diperbarui!');
+      }
+      setViewMode('list');
+      await loadInstansi();
     } catch (err) {
-      alert('Gagal memperbarui profil instansi.');
+      alert('Gagal menyimpan data instansi. Pastikan Kode Instansi unik.');
       console.error(err);
     }
   };
 
-  const handleCopyCode = () => {
-    if (!config) return;
-    navigator.clipboard.writeText(config.kode_instansi);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyCode = (code: string, id: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Generate / Reset Kode Instansi
-  const handleResetCode = async () => {
-    if (!config) return;
-    const isConfirm = window.confirm(
-      "PERINGATAN KEAMANAN!\n\nApakah Anda yakin ingin me-reset kode instansi? Kode lama akan tidak berlaku lagi, dan seluruh perangkat Android yang terhubung saat ini harus dikonfigurasikan ulang dengan kode baru."
-    );
-
-    if (isConfirm) {
-      // Format: [TIPE]-[KOTA]-[KODE_UNIK]
-      const parts = (config.kode_instansi || "SMA-MKS-0000").split('-');
-      const tipe = parts[0] || "SMA";
-      const kota = parts[1] || "MKS";
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let code = '';
-      for (let i = 0; i < 4; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      
-      const newCode = `${tipe}-${kota}-${code}`;
-      
-      try {
-        const updated = await db.updateInstansi({
-          id: config.id,
-          kode_instansi: newCode
-        });
-        setConfig({ ...config, ...updated });
-
-        await db.addLog(
-          "user-guru", 
-          "Pengajar Ujian",
-          "guru",
-          "Reset Kode Instansi", 
-          `Mengatur ulang kode instansi unik. Kode baru: ${newCode}.`
-        );
-
-        alert(`Kode instansi berhasil di-reset!\nKode Baru Anda: ${newCode}`);
-      } catch (err) {
-        alert('Gagal me-reset kode instansi.');
-        console.error(err);
-      }
-    }
+  const handleGenerateCode = () => {
+    const code = generateCode(nama);
+    setKodeInstansi(code);
   };
 
-  if (isLoading || !config) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-20 space-y-4">
         <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -113,134 +137,232 @@ export const InstansiSettings: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in font-sans">
-      {/* Welcome header */}
-      <div>
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 bg-clip-text text-transparent">
-          Pengaturan Lembaga / Sekolah
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">Konfigurasikan detail profil sekolah, integrasi APK Android, dan pengamanan kode instansi.</p>
+      {/* Header and Controls */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 bg-clip-text text-transparent">
+            Manajemen Instansi / Sekolah
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">Daftarkan lembaga baru, atur kode instansi unik untuk APK Android, dan konfigurasikan lembar sinkronisasi Google Sheets.</p>
+        </div>
+        {viewMode === 'list' && (
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold rounded-xl shadow-lg transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Instansi Baru</span>
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Side: General Profile Form */}
-        <div className="lg:col-span-2 p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-6">
-          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-200">
-            <Settings className="w-4.5 h-4.5 text-blue-600" />
-            <span>Informasi Umum Instansi</span>
-          </h3>
+      {viewMode === 'list' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {instansiList.length === 0 ? (
+            <div className="col-span-full p-12 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-white text-slate-400 text-sm">
+              Belum ada instansi terdaftar. Silakan tambahkan instansi baru.
+            </div>
+          ) : (
+            instansiList.map((inst) => (
+              <div key={inst.id} className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md shadow-lg flex flex-col justify-between hover:scale-[1.02] hover:border-slate-350 transition-all duration-300">
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <img 
+                      src={inst.logo || "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop"} 
+                      alt={inst.nama} 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop";
+                      }}
+                      className="w-14 h-14 rounded-xl object-cover border border-slate-200 shadow-md bg-slate-50 shrink-0"
+                    />
+                    <button
+                      onClick={() => handleOpenEdit(inst)}
+                      className="p-2 bg-slate-50 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-455 hover:text-slate-900 transition-all cursor-pointer shrink-0"
+                      title="Edit Instansi"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm line-clamp-1">{inst.nama}</h3>
+                    <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-1 font-mono">
+                      <Globe className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>{inst.zona_waktu}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-400 flex items-start gap-1 mt-1.5 leading-relaxed line-clamp-2">
+                      <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                      <span>{inst.alamat}</span>
+                    </p>
+                  </div>
+                </div>
 
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Nama Resmi Lembaga / Sekolah</label>
-              <input
-                type="text"
-                required
-                value={nama}
-                onChange={(e) => setNama(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none"
-              />
+                <div className="pt-4 border-t border-slate-100 mt-4 space-y-2">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Kode Instansi (APK)</span>
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-xs tracking-widest text-blue-700 select-all">
+                    <span>{inst.kode_instansi}</span>
+                    <button
+                      onClick={() => handleCopyCode(inst.kode_instansi, inst.id!)}
+                      className="p-1 bg-white border border-slate-200 hover:border-slate-350 text-slate-400 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
+                    >
+                      {copiedId === inst.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        /* Form view: Add / Edit Instansi */
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* Main Form fields */}
+          <div className="lg:col-span-2 p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-6">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <Settings className="w-4.5 h-4.5 text-blue-600" />
+                <span>{viewMode === 'add' ? 'Tambah Instansi Baru' : 'Ubah Informasi Instansi'}</span>
+              </h3>
+              <button 
+                onClick={() => setViewMode('list')}
+                className="p-1 text-slate-400 hover:text-slate-900 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Lengkap</label>
-              <textarea
-                required
-                value={alamat}
-                onChange={(e) => setAlamat(e.target.value)}
-                rows={3}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none resize-none"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5 col-span-1">
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Tautan Gambar Logo Instansi</label>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Nama Resmi Lembaga / Sekolah</label>
                 <input
                   type="text"
                   required
-                  value={logo}
-                  onChange={(e) => setLogo(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none font-mono text-[10px]"
+                  value={nama}
+                  onChange={(e) => setNama(e.target.value)}
+                  placeholder="SMA Negeri 1 Makassar"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none"
                 />
               </div>
 
-              <div className="space-y-1.5 col-span-1">
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Zona Waktu Sistem</label>
-                <select
-                  value={zonaWaktu}
-                  onChange={(e) => setZonaWaktu(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none"
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Lengkap</label>
+                <textarea
+                  required
+                  value={alamat}
+                  onChange={(e) => setAlamat(e.target.value)}
+                  placeholder="Jl. Baji Minasa No. 12, Makassar..."
+                  rows={3}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 col-span-1">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Tautan Gambar Logo Instansi</label>
+                  <input
+                    type="text"
+                    required
+                    value={logo}
+                    onChange={(e) => setLogo(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none font-mono text-[10px]"
+                  />
+                </div>
+
+                <div className="space-y-1.5 col-span-1">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Zona Waktu Sistem</label>
+                  <select
+                    value={zonaWaktu}
+                    onChange={(e) => setZonaWaktu(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-800 outline-none"
+                  >
+                    <option value="WIB (Asia/Jakarta)">WIB (Asia/Jakarta)</option>
+                    <option value="WITA (Asia/Makassar)">WITA (Asia/Makassar)</option>
+                    <option value="WIT (Asia/Jayapura)">WIT (Asia/Jayapura)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Integrasi Google Sheets URL (Opsional)</label>
+                <div className="relative">
+                  <Link2 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={gsheetsUrl}
+                    onChange={(e) => setGsheetsUrl(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/..."
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 pl-10 pr-3.5 text-xs text-slate-800 outline-none font-mono text-[10px]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-655 text-xs font-semibold rounded-xl transition-all cursor-pointer"
                 >
-                  <option value="WIB (Asia/Jakarta)">WIB (Asia/Jakarta)</option>
-                  <option value="WITA (Asia/Makassar)">WITA (Asia/Makassar)</option>
-                  <option value="WIT (Asia/Jayapura)">WIT (Asia/Jayapura)</option>
-                </select>
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold rounded-xl shadow-lg transition-all cursor-pointer"
+                >
+                  {viewMode === 'add' ? 'Tambahkan Instansi' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Right Side: Preview & Instance Code Info */}
+          <div className="space-y-6 lg:col-span-1 animate-fade-in">
+            {/* Instance Code Configuration Card */}
+            <div className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-5">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <ShieldAlert className="w-4.5 h-4.5 text-blue-600" />
+                <span>Kode Instansi Unik</span>
+              </h3>
+
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                Kode ini merupakan identitas unik instansi untuk dimasukkan ke APK Android siswa. Jika dikosongkan, sistem akan meng-generate kode secara otomatis.
+              </p>
+
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={kodeInstansi}
+                  onChange={(e) => setKodeInstansi(e.target.value.toUpperCase())}
+                  placeholder="AUTO GENERATED"
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl py-3 px-4 font-mono font-bold text-sm tracking-widest text-center text-blue-600 outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleGenerateCode}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-250 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Buat Ulang Kode Acak</span>
+                </button>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-200 flex justify-end">
-              <button
-                type="submit"
-                className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold rounded-xl shadow-lg transition-all cursor-pointer"
-              >
-                Simpan Perubahan Profil
-              </button>
+            {/* School logo preview */}
+            <div className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md text-center space-y-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Pratinjau Logo Instansi</h3>
+              <img 
+                src={logo || "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop"} 
+                alt="Logo Preview" 
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop";
+                }}
+                className="w-28 h-28 rounded-2xl mx-auto object-cover border border-slate-200 shadow-xl"
+              />
+              <p className="text-[10px] text-slate-400 font-semibold uppercase">{nama || 'Nama Instansi'}</p>
             </div>
-          </form>
-        </div>
-
-        {/* Right Side: Instance Code & Security Warning Panel */}
-        <div className="space-y-6 lg:col-span-1">
-          
-          {/* Instance Code Card */}
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-5">
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <ShieldAlert className="w-4.5 h-4.5 text-blue-600" />
-              <span>Kode Instansi Unik</span>
-            </h3>
-
-            <p className="text-slate-400 text-[11px] leading-relaxed">
-              Kode identitas unik lembaga ini wajib dimasukkan ke dalam **Aplikasi Android (APK)** agar siswa terhubung ke pangkalan data sekolah ini.
-            </p>
-
-            <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 flex items-center justify-between font-mono text-base tracking-widest text-blue-600 font-bold select-all relative group shadow-inner">
-              <span>{config.kode_instansi}</span>
-              <button
-                onClick={handleCopyCode}
-                className="p-1.5 bg-white border border-slate-200 hover:border-slate-350 text-slate-400 hover:text-slate-900 rounded-lg transition-colors cursor-pointer"
-                title="Salin Kode"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-
-            <button
-              onClick={handleResetCode}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 text-xs font-semibold rounded-xl transition-all cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset & Generate Kode Baru</span>
-            </button>
           </div>
-
-          {/* School logo preview */}
-          <div className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md text-center space-y-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Pratinjau Logo Instansi</h3>
-            <img 
-              src={logo} 
-              alt="Logo Preview" 
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=200&auto=format&fit=crop";
-              }}
-              className="w-28 h-28 rounded-2xl mx-auto object-cover border border-slate-200 shadow-xl shadow-black/45"
-            />
-            <p className="text-[10px] text-slate-400 font-semibold uppercase">{nama}</p>
-          </div>
-
         </div>
-
-      </div>
+      )}
     </div>
   );
 };

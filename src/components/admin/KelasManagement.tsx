@@ -4,6 +4,7 @@ import { db, User } from '../../utils/supabaseDb';
 
 export const KelasManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [customClasses, setCustomClasses] = useState<string[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>("XII MIPA 1");
   const [newClassName, setNewClassName] = useState('');
   const [isAddClassOpen, setIsAddClassOpen] = useState(false);
@@ -27,16 +28,23 @@ export const KelasManagement: React.FC = () => {
   const teachers = users.filter(u => u.role === 'guru');
   const students = users.filter(u => u.role === 'siswa');
 
-  // Group students by class dynamically
-  const classes = ["XII MIPA 1", "XII MIPA 2", "XII IPS 1", "XII IPS 2"];
+  // Group classes dynamically from students and any newly added custom classes
+  const classes = Array.from(new Set([
+    ...customClasses,
+    ...(students.map(s => s.kelas).filter(Boolean) as string[])
+  ]));
+  if (classes.length === 0) {
+    classes.push("XII MIPA 1", "XII MIPA 2", "XII IPS 1", "XII IPS 2");
+  }
 
   // Filter students in active class
   const classStudents = students.filter(s => s.kelas === selectedClass);
   
-  // Assign dummy teacher to class for simulation
+  // Get primary teacher/homeroom teacher for the class dynamically from teachers list
   const getClassTeacher = (className: string) => {
-    if (className.includes("MIPA")) return teachers[0] || null;
-    return teachers[1] || null;
+    if (teachers.length === 0) return null;
+    const index = classes.indexOf(className);
+    return teachers[index >= 0 ? index % teachers.length : 0] || null;
   };
 
   const activeTeacher = getClassTeacher(selectedClass);
@@ -44,7 +52,13 @@ export const KelasManagement: React.FC = () => {
   const handleAddClass = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClassName.trim()) return;
-    alert(`Rombongan belajar '${newClassName}' berhasil dibuat!`);
+    const upperName = newClassName.trim().toUpperCase();
+    if (classes.includes(upperName)) {
+      alert(`Kelas '${upperName}' sudah ada!`);
+      return;
+    }
+    setCustomClasses(prev => [...prev, upperName]);
+    setSelectedClass(upperName);
     setNewClassName('');
     setIsAddClassOpen(false);
   };

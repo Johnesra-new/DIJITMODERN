@@ -74,9 +74,11 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({ onLoginSuccess }) => {
       // Search user in Supabase DB by username, email, or NIP/NIS
       const foundUser = await db.getUserByLogin(username.trim());
 
-      // Hardcoded password validation check for demo purposes (accepts "password" or any string for easy testing)
-      // If you type "salah", it fails, so we can test the lock / captcha functionality.
-      const isPasswordCorrect = password !== 'salah';
+      // Verifikasi password asli: jika kolom password_hash ada di DB, bandingkan langsung.
+      // Jika kosong atau tidak ada (misalnya untuk demo), maka perbolehkan string apa saja (kecuali "salah")
+      const isPasswordCorrect = foundUser && foundUser.password_hash 
+        ? password === foundUser.password_hash 
+        : password !== 'salah';
 
       if (foundUser && isPasswordCorrect) {
         if (foundUser.status === 'nonaktif') {
@@ -181,7 +183,7 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({ onLoginSuccess }) => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Masukkan username/NIP/NIS..."
-                  className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-300 focus:border-cyan-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-cyan-500/10"
+                  className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-350 focus:border-cyan-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </div>
             </div>
@@ -203,7 +205,7 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({ onLoginSuccess }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan kata sandi..."
-                  className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-300 focus:border-cyan-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-cyan-500/10"
+                  className="w-full bg-slate-50/70 border border-slate-200 hover:border-slate-350 focus:border-cyan-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-600 focus:ring-2 focus:ring-cyan-500/10"
                 />
               </div>
             </div>
@@ -247,18 +249,25 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({ onLoginSuccess }) => {
         {/* Demo Helper Guide */}
         <div className="mt-8 pt-6 border-t border-slate-200 text-xs text-slate-400 space-y-2">
           <p className="font-semibold text-slate-400 text-center uppercase tracking-wider mb-2">Panduan Akun Uji Coba</p>
-          <div className="grid grid-cols-2 gap-3 text-[10px]">
-            <div className="p-2 bg-slate-50 rounded border border-slate-200 text-center">
-              <span className="font-semibold text-cyan-600 block text-xs">Guru (Super User)</span>
-              username: <code className="text-slate-700">budi</code>
+          <div className="space-y-2 text-[10px]">
+            <div className="p-2.5 bg-slate-50 rounded border border-slate-200 text-center font-mono">
+              <span className="font-semibold text-purple-600 block text-xs">Super Admin (Owner)</span>
+              username: <code className="text-slate-900 font-bold">STIVENJOSH</code><br/>
+              password: <code className="text-slate-900 font-bold">STIVENJGJGA123</code>
             </div>
-            <div className="p-2 bg-slate-50 rounded border border-slate-200 text-center">
-              <span className="font-semibold text-emerald-600 block text-xs">Siswa</span>
-              username: <code className="text-slate-700">siswa1</code>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 bg-slate-50 rounded border border-slate-200 text-center">
+                <span className="font-semibold text-cyan-600 block text-xs">Guru (Super User)</span>
+                username: <code className="text-slate-700">budi</code>
+              </div>
+              <div className="p-2 bg-slate-50 rounded border border-slate-200 text-center">
+                <span className="font-semibold text-emerald-600 block text-xs">Siswa</span>
+                username: <code className="text-slate-700">siswa1</code>
+              </div>
             </div>
           </div>
-          <p className="text-center text-[10px] text-slate-600 italic mt-2">
-            *Ketik password apa saja (kecuali kata "salah" untuk memicu error login).
+          <p className="text-center text-[9px] text-slate-500 italic mt-2">
+            *Untuk Guru & Siswa, ketik password apa saja (kecuali "salah").
           </p>
         </div>
       </div>

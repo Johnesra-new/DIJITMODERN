@@ -8,12 +8,14 @@ import {
   Check, 
   X, 
   Mail, 
-  BookOpen
+  BookOpen,
+  Building2
 } from 'lucide-react';
-import { db, User } from '../../utils/supabaseDb';
+import { db, User, InstansiConfig } from '../../utils/supabaseDb';
 
 export const GuruManagement: React.FC = () => {
   const [teachers, setTeachers] = useState<User[]>([]);
+  const [instansiList, setInstansiList] = useState<InstansiConfig[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -29,6 +31,7 @@ export const GuruManagement: React.FC = () => {
   const [email, setEmail] = useState('');
   const [mapel, setMapel] = useState('');
   const [status, setStatus] = useState<'aktif' | 'nonaktif'>('aktif');
+  const [instansiId, setInstansiId] = useState('');
 
   // Success dialog state
   const [successDialog, setSuccessDialog] = useState<{title: string, body: string} | null>(null);
@@ -37,8 +40,11 @@ export const GuruManagement: React.FC = () => {
     try {
       const allUsers = await db.getUsers();
       setTeachers(allUsers.filter(u => u.role === 'guru'));
+      
+      const list = await db.getAllInstansi();
+      setInstansiList(list);
     } catch (err) {
-      console.error("Gagal memuat daftar guru:", err);
+      console.error("Gagal memuat data pengajar:", err);
     } finally {
       setIsLoading(false);
     }
@@ -55,6 +61,7 @@ export const GuruManagement: React.FC = () => {
     setEmail('');
     setMapel('');
     setStatus('aktif');
+    setInstansiId(instansiList[0]?.id || '');
     setIsAddModalOpen(true);
   };
 
@@ -66,6 +73,7 @@ export const GuruManagement: React.FC = () => {
     setEmail(teacher.email);
     setMapel(teacher.mapel ? teacher.mapel.join(', ') : '');
     setStatus(teacher.status);
+    setInstansiId(teacher.instansi_id || '');
     setIsEditModalOpen(true);
   };
 
@@ -87,6 +95,7 @@ export const GuruManagement: React.FC = () => {
         role: 'guru',
         status,
         mapel: mapelList,
+        instansi_id: instansiId || null,
         avatar: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name)}`
       });
 
@@ -98,7 +107,7 @@ export const GuruManagement: React.FC = () => {
       setIsAddModalOpen(false);
       await handleRefreshList();
     } catch (err) {
-      alert("Gagal menambahkan pengajar baru.");
+      alert("Gagal menambahkan pengajar baru. Username mungkin sudah digunakan.");
       console.error(err);
     }
   };
@@ -122,7 +131,8 @@ export const GuruManagement: React.FC = () => {
         nip_nis: nip,
         email,
         status,
-        mapel: mapelList
+        mapel: mapelList,
+        instansi_id: instansiId || null
       });
 
       setIsEditModalOpen(false);
@@ -142,13 +152,20 @@ export const GuruManagement: React.FC = () => {
     }
 
     try {
-      await db.addLog("user-guru", "Pengajar Ujian", "guru", "Reset Password Guru", `Melakukan reset kata sandi untuk guru ${teacher.name}.`);
+      // Update password hash in db
+      await db.updateUser({
+        id: teacher.id,
+        password_hash: newPassword
+      });
+
+      await db.addLog(teacher.id, teacher.name, "guru", "Reset Password Guru", `Melakukan reset kata sandi untuk guru ${teacher.name}.`);
 
       setSuccessDialog({
         title: 'Reset Password Berhasil!',
         body: `Kata sandi untuk ${teacher.name} (NIP: ${teacher.nip_nis}) telah di-reset secara otomatis.\n\nKata Sandi Baru: ${newPassword}\n\nSilakan salin password ini dan berikan secara aman kepada yang bersangkutan.`
       });
     } catch (err) {
+      alert("Gagal me-reset sandi guru.");
       console.error(err);
     }
   };
@@ -161,8 +178,8 @@ export const GuruManagement: React.FC = () => {
         status: updatedStatus
       });
       await db.addLog(
-        "user-guru",
-        "Pengajar Ujian",
+        teacher.id,
+        teacher.name,
         "guru",
         "Ubah Status Guru", 
         `Mengubah status guru ${teacher.name} menjadi ${updatedStatus.toUpperCase()}.`
@@ -175,8 +192,7 @@ export const GuruManagement: React.FC = () => {
 
   const filteredTeachers = teachers.filter(t => 
     (t.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    (t.nip_nis || '').includes(search) ||
-    (t.email || '').toLowerCase().includes(search.toLowerCase())
+    (t.nip_nis || '').includes(search)
   );
 
   if (isLoading) {
@@ -191,25 +207,24 @@ export const GuruManagement: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in font-sans">
       {/* Header and Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600 bg-clip-text text-transparent">
             Manajemen Akun Guru
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Daftarkan akun pengajar, atur penugasan mata pelajaran, dan lakukan kontrol akses.</p>
+          <p className="text-slate-400 text-sm mt-1">Daftarkan akun guru pengajar instansi, reset password secara aman, dan nonaktifkan akses jika diperlukan.</p>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-550 hover:to-cyan-450 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/15 transition-all duration-200 cursor-pointer animate-fade-in"
+          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold rounded-xl shadow-lg transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Tambah Guru Baru</span>
         </button>
       </div>
 
-      {/* Table Container card */}
+      {/* Table Container Card */}
       <div className="p-6 rounded-2xl border border-slate-200 bg-white backdrop-blur-md space-y-4">
-        
         {/* Search */}
         <div className="relative max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -230,89 +245,97 @@ export const GuruManagement: React.FC = () => {
             <table className="w-full text-left text-xs md:text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 text-xs uppercase tracking-wider">
-                  <th className="pb-3 font-semibold">Guru / Pengajar</th>
-                  <th className="pb-3 font-semibold">NIP / Identitas</th>
+                  <th className="pb-3 font-semibold">Nama Pengajar</th>
+                  <th className="pb-3 font-semibold">NIP</th>
+                  <th className="pb-3 font-semibold">Instansi</th>
                   <th className="pb-3 font-semibold">Mata Pelajaran</th>
                   <th className="pb-3 font-semibold text-center">Status</th>
                   <th className="pb-3 font-semibold text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredTeachers.map((teacher) => (
-                  <tr key={teacher.id} className="group hover:bg-slate-50 transition-colors">
-                    <td className="py-3.5 pr-3">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src={teacher.avatar} 
-                          alt={teacher.name}
-                          className="w-9 h-9 rounded-full object-cover border border-slate-200 bg-slate-50 shrink-0" 
-                        />
-                        <div>
-                          <p className="font-semibold text-slate-800">{teacher.name}</p>
-                          <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Mail className="w-3 h-3 text-slate-600 shrink-0" />
-                            {teacher.email}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-3 font-mono text-xs text-slate-450">
-                      {teacher.nip_nis}
-                    </td>
-                    <td className="py-3.5 px-3">
-                      <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-                        {teacher.mapel && teacher.mapel.length > 0 ? (
-                          teacher.mapel.map((mp, index) => (
-                            <span 
-                              key={index} 
-                              className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-[10px] text-slate-400 rounded-md font-mono"
-                            >
-                              {mp}
+                {filteredTeachers.map((teacher) => {
+                  const linkedInst = instansiList.find(ins => ins.id === teacher.instansi_id);
+                  return (
+                    <tr key={teacher.id} className="group hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 pr-3">
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={teacher.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(teacher.name)}`} 
+                            alt={teacher.name}
+                            className="w-9 h-9 rounded-full object-cover border border-slate-200 bg-slate-50 shrink-0" 
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-800">{teacher.name}</p>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Mail className="w-3 h-3 text-slate-600 shrink-0" />
+                              {teacher.email}
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-slate-600 italic text-[11px]">Belum di-assign</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <button
-                        onClick={() => toggleStatus(teacher)}
-                        className={`px-2.5 py-0.5 text-[10px] rounded-full border font-semibold transition-colors cursor-pointer inline-block ${
-                          teacher.status === 'aktif'
-                            ? 'bg-emerald-100 border-emerald-300 text-emerald-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600'
-                            : 'bg-rose-100 border-rose-300 text-rose-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600'
-                        }`}
-                        title="Klik untuk mengubah status aktif"
-                      >
-                        {teacher.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
-                      </button>
-                    </td>
-                    <td className="py-3.5 pl-3 text-right">
-                      <div className="flex justify-end gap-2">
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-xs text-slate-450">
+                        {teacher.nip_nis}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="px-2 py-0.5 bg-purple-50 border border-purple-100 text-[10px] text-purple-700 rounded-md font-semibold font-mono">
+                          {linkedInst ? linkedInst.nama : 'Tanpa Instansi'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                          {teacher.mapel && teacher.mapel.length > 0 ? (
+                            teacher.mapel.map((mp, index) => (
+                              <span 
+                                key={index} 
+                                className="px-2 py-0.5 bg-slate-50 border border-slate-200 text-[10px] text-slate-400 rounded-md font-mono"
+                              >
+                                {mp}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-600 italic text-[11px]">Belum di-assign</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 text-center">
                         <button
-                          onClick={() => openEditModal(teacher)}
-                          className="p-1.5 bg-slate-50 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-455 hover:text-slate-900 transition-all cursor-pointer"
-                          title="Edit Guru"
+                          onClick={() => toggleStatus(teacher)}
+                          className={`px-2.5 py-0.5 text-[10px] rounded-full border font-semibold transition-colors cursor-pointer inline-block ${
+                            teacher.status === 'aktif'
+                              ? 'bg-emerald-100 border-emerald-300 text-emerald-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600'
+                              : 'bg-rose-100 border-rose-300 text-rose-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600'
+                          }`}
+                          title="Klik untuk mengubah status aktif"
                         >
-                          <Edit className="w-3.5 h-3.5" />
+                          {teacher.status === 'aktif' ? 'Aktif' : 'Nonaktif'}
                         </button>
-                        <button
-                          onClick={() => handleResetPassword(teacher)}
-                          className="p-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-lg text-slate-455 hover:text-blue-600 transition-all cursor-pointer"
-                          title="Reset Password"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3.5 pl-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => openEditModal(teacher)}
+                            className="p-1.5 bg-slate-50 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-455 hover:text-slate-900 transition-all cursor-pointer"
+                            title="Edit Guru"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleResetPassword(teacher)}
+                            className="p-1.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-lg text-slate-455 hover:text-blue-600 transition-all cursor-pointer"
+                            title="Reset Password"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
         </div>
-
       </div>
 
       {/* Success Dialog Popup */}
@@ -402,6 +425,24 @@ export const GuruManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* Instansi Dropdown Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Pilih Instansi / Sekolah Asal</span>
+                </label>
+                <select
+                  value={instansiId}
+                  onChange={(e) => setInstansiId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-850 outline-none"
+                >
+                  <option value="">-- Pilih Instansi --</option>
+                  {instansiList.map((ins) => (
+                    <option key={ins.id} value={ins.id}>{ins.nama}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block">
                   <BookOpen className="w-3.5 h-3.5 text-slate-400" />
@@ -454,7 +495,7 @@ export const GuruManagement: React.FC = () => {
                   type="submit"
                   className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-semibold rounded-xl shadow-lg transition-all cursor-pointer"
                 >
-                  Simpan & Generate Password
+                  Simpan & Pendaftaran
                 </button>
               </div>
             </form>
@@ -518,6 +559,24 @@ export const GuruManagement: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Instansi Dropdown Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 block">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Pilih Instansi / Sekolah Asal</span>
+                </label>
+                <select
+                  value={instansiId}
+                  onChange={(e) => setInstansiId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3 text-xs text-slate-850 outline-none"
+                >
+                  <option value="">-- Pilih Instansi --</option>
+                  {instansiList.map((ins) => (
+                    <option key={ins.id} value={ins.id}>{ins.nama}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1.5">

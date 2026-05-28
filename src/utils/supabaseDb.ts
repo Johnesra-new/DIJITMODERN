@@ -16,6 +16,7 @@ export interface User {
   mapel?: string[];
   kelas?: string;
   avatar?: string;
+  instansi_id?: string | null;
 }
 
 export interface Question {
@@ -121,6 +122,15 @@ export const db = {
   async getInstansi(): Promise<InstansiConfig> {
     const { data } = await supabase.from('instansi').select('*').limit(1).single();
     return data || { nama: '', logo: '', alamat: '', kode_instansi: '', zona_waktu: '', gsheets_url: '' };
+  },
+  async getAllInstansi(): Promise<InstansiConfig[]> {
+    const { data } = await supabase.from('instansi').select('*').order('nama');
+    return data || [];
+  },
+  async addInstansi(config: Omit<InstansiConfig, 'id'>): Promise<InstansiConfig> {
+    const { data, error } = await supabase.from('instansi').insert(config).select().single();
+    if (error) throw error;
+    return data!;
   },
   async updateInstansi(config: Partial<InstansiConfig> & { id?: string }) {
     if (config.id) {
