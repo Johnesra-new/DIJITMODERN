@@ -38,6 +38,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
   const [username, setUsername] = useState('');
   const [nis, setNis] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [kelas, setKelas] = useState('XII MIPA 1');
   const [status, setStatus] = useState<'aktif' | 'nonaktif'>('aktif');
   const [studentInstansiId, setStudentInstansiId] = useState<string>('');
@@ -80,6 +81,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
     setUsername('');
     setNis('');
     setEmail('');
+    setPassword('');
     setKelas('XII MIPA 1');
     setStatus('aktif');
     setStudentInstansiId(instansiList[0]?.id || '');
@@ -91,7 +93,8 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
     setName(student.name);
     setUsername(student.username);
     setNis(student.nip_nis);
-    setEmail(student.email);
+    setEmail(student.email || '');
+    setPassword(student.password_hash || '');
     setKelas(student.kelas || 'XII MIPA 1');
     setStatus(student.status);
     setStudentInstansiId(student.instansi_id || '');
@@ -100,8 +103,8 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
 
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !username.trim() || !nis.trim() || !email.trim()) {
-      alert('Semua field wajib diisi!');
+    if (!name.trim() || !username.trim() || !nis.trim() || !password.trim()) {
+      alert('Nama, Username, NIS, dan Password wajib diisi!');
       return;
     }
 
@@ -113,11 +116,14 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
         finalInstansiId = studentInstansiId || null;
       }
 
+      const studentEmail = email.trim() || `${username.trim()}@siswa.dijit`;
+
       const newUser = await db.addUser({
-        username,
-        name,
-        nip_nis: nis,
-        email,
+        username: username.trim(),
+        name: name.trim(),
+        nip_nis: nis.trim(),
+        email: studentEmail,
+        password_hash: password.trim(),
         role: 'siswa',
         status,
         kelas,
@@ -127,7 +133,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
 
       setSuccessDialog({
         title: 'Siswa Berhasil Didaftarkan!',
-        body: `Akun siswa atas nama ${newUser.name} telah dibuat.\nNIS: ${newUser.nip_nis}\nKelas: ${newUser.kelas}\n\nPassword acak awal telah terkirim ke email siswa.`
+        body: `Akun siswa atas nama ${newUser.name} telah dibuat.\nNIS: ${newUser.nip_nis}\nKelas: ${newUser.kelas}\nKata Sandi: ${password.trim()}`
       });
 
       setIsAddModalOpen(false);
@@ -142,18 +148,19 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
     e.preventDefault();
     if (!currentStudent) return;
 
-    if (!name.trim() || !username.trim() || !nis.trim() || !email.trim()) {
-      alert('Semua field wajib diisi!');
+    if (!name.trim() || !username.trim() || !nis.trim() || !password.trim()) {
+      alert('Nama, Username, NIS, dan Password wajib diisi!');
       return;
     }
 
     try {
       await db.updateUser({
         id: currentStudent.id,
-        name,
-        username,
-        nip_nis: nis,
-        email,
+        name: name.trim(),
+        username: username.trim(),
+        nip_nis: nis.trim(),
+        email: email.trim() || `${username.trim()}@siswa.dijit`,
+        password_hash: password.trim(),
         status,
         kelas,
         instansi_id: currentUser?.role === 'admin' ? (studentInstansiId || null) : currentStudent.instansi_id
@@ -392,6 +399,7 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
         name: row.nama,
         nip_nis: row.nis,
         email: row.email,
+        password_hash: randPassword,
         role: 'siswa',
         status: 'aktif',
         kelas: row.kelas,
@@ -790,14 +798,24 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
                   />
                 </div>
                 <div className="space-y-1.5 col-span-1">
-                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Email Siswa</label>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Email (Opsional)</label>
                   <input
                     type="email"
-                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="aditya@siswa.sch.id"
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none placeholder:text-slate-550"
+                  />
+                </div>
+                <div className="space-y-1.5 col-span-1">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Kata Sandi (Password)</label>
+                  <input
+                    type="text"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Sandi login siswa..."
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none placeholder:text-slate-550 font-mono"
                   />
                 </div>
               </div>
@@ -931,13 +949,22 @@ export const SiswaManagement: React.FC<SiswaManagementProps> = ({ currentUser })
                   />
                 </div>
                 <div className="space-y-1.5 col-span-1">
-                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Email</label>
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Alamat Email (Opsional)</label>
                   <input
                     type="email"
-                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5 col-span-1">
+                  <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Kata Sandi (Password)</label>
+                  <input
+                    type="text"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-xs text-slate-800 outline-none font-mono"
                   />
                 </div>
               </div>
